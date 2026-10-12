@@ -12,7 +12,7 @@ on:
 permissions:
   contents: read
   id-token: write
-   
+  
 jobs:
   deploy-dev:
     name: Build and deploy to DEV
