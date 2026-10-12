@@ -1,0 +1,6 @@
+@ws_wa_app_remesas_HostAddress = http://localhost:5119
+
+GET {{ws_wa_app_remesas_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

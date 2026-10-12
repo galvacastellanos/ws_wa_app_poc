@@ -1,0 +1,23 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ALB listener template for ws-wa-app-poc-v1
+
+Parameters:
+  LoadBalancerArn:
+    Type: String
+  TargetGroupArn:
+    Type: String
+
+Resources:
+  HttpListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancerArn
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroupArn
+
+Outputs:
+  ListenerArn:
+    Value: !Ref HttpListener

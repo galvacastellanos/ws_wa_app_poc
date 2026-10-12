@@ -1,0 +1,142 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Main infrastructure for ws_wa_app_poc
+ 
+Parameters:
+  EnvironmentName:
+    Type: String
+    AllowedValues:
+      - dev
+      - prd
+
+  TemplatesBaseUrl:
+    Type: String
+    Description: HTTPS URL of the S3 folder containing child templates
+
+  GitHubOwner:
+    Type: String
+
+  GitHubRepository:
+    Type: String
+
+  GitHubSubject:
+    Type: String
+
+  ImageUri:
+    Type: String
+    Default: public.ecr.aws/docker/library/nginx:latest
+    Description: Container image URI. Use temporary value for bootstrap and update from GitHub Actions later.
+
+  DesiredCount:
+    Type: Number
+    Default: 0
+
+  ContainerPort:
+    Type: Number
+    Default: 8080
+
+  HealthCheckPath:
+    Type: String
+    Default: /health
+
+Mappings:
+  EnvironmentConfig:
+    dev:
+      TemplatesBaseUrl: https://hspo-dev-s3-repositorio.s3.us-east-1.amazonaws.com/infrastructure
+      GitHubOwner: galvacastellanos
+      GitHubRepository: ws_wa_app_poc
+      GitHubSubject: repo:galvacastellanos/ws_wa_app_poc:environment:dev
+    prd:
+      TemplatesBaseUrl: https://REPLACE_BUCKET.s3.REPLACE_REGION.amazonaws.com/infrastructure
+      GitHubOwner: galvacastellanos
+      GitHubRepository: ws_wa_app_remesas
+      GitHubSubject: repo:galvacastellanos/ws_wa_app_remesas:ref:refs/heads/master
+
+Resources:
+  NetworkingStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub
+        - '${BaseUrl}/templates/networking.yml'
+        - BaseUrl: !FindInMap [EnvironmentConfig, !Ref EnvironmentName, TemplatesBaseUrl]
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+
+  EcrStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+
+  SecretsStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+
+  IamStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - SecretsStack
+    Properties:
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        DatabaseSecretArn: !GetAtt SecretsStack.Outputs.DatabaseSecretArn
+
+  GitHubActionsRoleStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - IamStack
+    Properties:
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+
+  EcsStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - NetworkingStack
+      - EcrStack
+      - IamStack
+      - SecretsStack
+    Properties:
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        VpcId: !GetAtt NetworkingStack.Outputs.VpcId
+        PublicSubnetA: !GetAtt NetworkingStack.Outputs.PublicSubnetAId
+        PublicSubnetB: !GetAtt NetworkingStack.Outputs.PublicSubnetBId
+        PrivateSubnetA: !GetAtt NetworkingStack.Outputs.PrivateSubnetAId
+        PrivateSubnetB: !GetAtt NetworkingStack.Outputs.PrivateSubnetBId
+        ExecutionRoleArn: !GetAtt IamStack.Outputs.ExecutionRoleArn
+        TaskRoleArn: !GetAtt IamStack.Outputs.TaskRoleArn
+        DatabaseSecretArn: !GetAtt SecretsStack.Outputs.DatabaseSecretArn
+        ImageUri: !Ref ImageUri
+        DesiredCount: !Ref DesiredCount
+        ContainerPort: !Ref ContainerPort
+        HealthCheckPath: !Ref HealthCheckPath
+
+Outputs:
+  VpcId:
+    Value: !GetAtt NetworkingStack.Outputs.VpcId
+
+  EcrRepositoryUri:
+    Value: !GetAtt EcrStack.Outputs.RepositoryUri
+
+  DatabaseSecretArn:
+    Value: !GetAtt SecretsStack.Outputs.DatabaseSecretArn
+
+  EcsExecutionRoleArn:
+    Value: !GetAtt IamStack.Outputs.ExecutionRoleArn
+
+  EcsTaskRoleArn:
+    Value: !GetAtt IamStack.Outputs.TaskRoleArn
+
+  GitHubActionsRoleArn:
+    Value: !GetAtt GitHubActionsRoleStack.Outputs.GitHubActionsRoleArn
+
+  EcsClusterName:
+    Value: !GetAtt EcsStack.Outputs.ClusterName
+
+  EcsServiceName:
+    Value: !GetAtt EcsStack.Outputs.ServiceName
+
+  ApplicationURL:
+    Value: !GetAtt EcsStack.Outputs.ApplicationURL

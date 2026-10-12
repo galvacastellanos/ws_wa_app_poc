@@ -1,0 +1,212 @@
+# ECS template
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ECS Fargate infrastructure for ws_wa_app_poc
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    AllowedValues:
+      - dev
+      - prd
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet::Id
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet::Id
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet::Id
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet::Id
+
+  ExecutionRoleArn:
+    Type: String
+
+  TaskRoleArn:
+    Type: String
+
+  DatabaseSecretArn:
+    Type: String
+
+  ImageUri:
+    Type: String
+    Default: public.ecr.aws/docker/library/nginx:latest
+    Description: Container image URI. Use a temporary value for bootstrap and update later from GitHub Actions.
+
+  DesiredCount:
+    Type: Number
+    Default: 0
+
+  ContainerPort:
+    Type: Number
+    Default: 8080
+
+  HealthCheckPath:
+    Type: String
+    Default: /health
+
+Resources:
+  ApplicationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/ws-wa-app-poc-v1-${EnvironmentName}'
+      RetentionInDays: 30
+
+  ApplicationCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub 'ws-wa-app-poc-v1-${EnvironmentName}'
+      Tags:
+        - Key: Application
+          Value: ws_wa_app_poc
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP traffic to the application load balancer
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub 'ws-wa-app-poc-v1-${EnvironmentName}-alb-sg'
+
+  TaskSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow application traffic only from the ALB
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref ContainerPort
+          ToPort: !Ref ContainerPort
+          SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub 'ws-wa-app-poc-v1-${EnvironmentName}-task-sg'
+
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub 'ws-wa-app-poc-v1-${EnvironmentName}'
+      Scheme: internet-facing
+      Type: application
+      Subnets:
+        - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
+      SecurityGroups:
+        - !Ref LoadBalancerSecurityGroup
+
+  ApplicationTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub 'ws-wa-app-poc-v1-${EnvironmentName}'
+      VpcId: !Ref VpcId
+      Protocol: HTTP
+      Port: !Ref ContainerPort
+      TargetType: ip
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: !Ref HealthCheckPath
+      Matcher:
+        HttpCode: '200-399'
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  HttpListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ApplicationTargetGroup
+
+  ApplicationTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub 'ws-wa-app-poc-v1-${EnvironmentName}'
+      RequiresCompatibilities:
+        - FARGATE
+      NetworkMode: awsvpc
+      Cpu: '256'
+      Memory: '512'
+      ExecutionRoleArn: !Ref ExecutionRoleArn
+      TaskRoleArn: !Ref TaskRoleArn
+      ContainerDefinitions:
+        - Name: ws-wa-app-poc-v1
+          Image: !Ref ImageUri
+          Essential: true
+          PortMappings:
+            - ContainerPort: !Ref ContainerPort
+              Protocol: tcp
+          Environment:
+            - Name: ASPNETCORE_HTTP_PORTS
+              Value: !Sub '${ContainerPort}'
+          Secrets:
+            - Name: ConnectionStrings__Default
+              ValueFrom: !Sub '${DatabaseSecretArn}:ConnectionStrings__Default::'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ApplicationLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: app
+
+  ApplicationService:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - HttpListener
+    Properties:
+      ServiceName: !Sub 'ws-wa-app-poc-v1-${EnvironmentName}'
+      Cluster: !Ref ApplicationCluster
+      LaunchType: FARGATE
+      DesiredCount: !Ref DesiredCount
+      TaskDefinition: !Ref ApplicationTaskDefinition
+      HealthCheckGracePeriodSeconds: 60
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref PrivateSubnetA
+            - !Ref PrivateSubnetB
+          SecurityGroups:
+            - !Ref TaskSecurityGroup
+      LoadBalancers:
+        - ContainerName: ws-wa-app-poc-v1
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref ApplicationTargetGroup
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+Outputs:
+  ClusterName:
+    Value: !Ref ApplicationCluster
+
+  ServiceName:
+    Value: !GetAtt ApplicationService.Name
+
+  TaskDefinitionArn:
+    Value: !Ref ApplicationTaskDefinition
+
+  LoadBalancerDNS:
+    Description: HTTP endpoint of the application
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+
+  ApplicationURL:
+    Value: !Sub 'http://${ApplicationLoadBalancer.DNSName}'

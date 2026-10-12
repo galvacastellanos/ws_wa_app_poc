@@ -1,0 +1,108 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: GitHub Actions OIDC role for ws-wa-app-poc-v1
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    AllowedValues:
+      - dev
+      - prd
+
+  GitHubOwner:
+    Type: String
+    Description: GitHub username or organization
+
+  GitHubRepository:
+    Type: String
+    Default: ws_wa_app_remesas
+    Description: GitHub repository name
+     
+  GitHubSubject:
+    Type: String
+    Description: Exact GitHub OIDC subject claim
+
+Resources:
+  GitHubActionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'ws-wa-app-poc-v1-${EnvironmentName}-github-actions'
+
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'
+            Action:
+              - sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Ref GitHubSubject
+
+      Policies:
+        - PolicyName: EcrPushPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: EcrAuthentication
+                Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: '*'
+
+              - Sid: PushApplicationImage
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:CompleteLayerUpload
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                Resource: !Sub 'arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/ws-wa-app-poc-v1-${EnvironmentName}'
+
+        - PolicyName: EcsDeploymentPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: RegisterTaskDefinition
+                Effect: Allow
+                Action:
+                  - ecs:RegisterTaskDefinition
+                  - ecs:DescribeTaskDefinition
+                Resource: '*'
+
+              - Sid: UpdateApplicationService
+                Effect: Allow
+                Action:
+                  - ecs:DescribeServices
+                  - ecs:UpdateService
+                Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:service/ws-wa-app-poc-v1-${EnvironmentName}/ws-wa-app-poc-v1-${EnvironmentName}'
+
+              - Sid: PassEcsRoles
+                Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ws-wa-app-poc-v1-${EnvironmentName}-ecs-execution-role'
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ws-wa-app-poc-v1-${EnvironmentName}-ecs-task-role'
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: ecs-tasks.amazonaws.com
+
+      Tags:
+        - Key: Application
+          Value: ws_wa_app_poc
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+Outputs:
+  GitHubActionsRoleArn:
+    Description: ARN to configure in GitHub Actions
+    Value: !GetAtt GitHubActionsRole.Arn
+
+  GitHubOidcProviderArn:
+    Description: GitHub OIDC provider ARN
+    Value: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'

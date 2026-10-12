@@ -1,0 +1,34 @@
+[
+  {
+    "ParameterKey": "EnvironmentName",
+    "ParameterValue": "dev"
+  },
+  {
+    "ParameterKey": "TemplatesBaseUrl",
+    "ParameterValue": "https://hspo-dev-s3-repositorio.s3.us-east-1.amazonaws.com/infrastructure"
+  },
+  {
+    "ParameterKey": "GitHubOwner",
+    "ParameterValue": "galvacastellanos"
+  },
+  {
+    "ParameterKey": "GitHubRepository",
+    "ParameterValue": "ws_wa_app_poc"
+  },
+  {
+    "ParameterKey": "GitHubSubject",
+    "ParameterValue": "repo:galvacastellanos/ws_wa_app_poc:environment:dev"
+  },
+  {
+    "ParameterKey": "DesiredCount",
+    "ParameterValue": "0"
+  },
+  {
+    "ParameterKey": "ContainerPort",
+    "ParameterValue": "8080"
+  },
+  {
+    "ParameterKey": "HealthCheckPath",
+    "ParameterValue": "/health"
+  }
+]

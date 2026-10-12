@@ -1,0 +1,42 @@
+# ECR template
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ECR repository for ws_wa_app_poc
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    AllowedValues:
+      - dev
+      - prd
+    Description: Deployment environment
+
+Resources:
+  ApplicationRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub 'ws-wa-app-poc-v1-${EnvironmentName}'
+
+      ImageTagMutability: IMMUTABLE
+
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+      EncryptionConfiguration:
+        EncryptionType: AES256
+
+      EmptyOnDelete: false
+
+      Tags:
+        - Key: Application
+          Value: ws_wa_app_poc
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+Outputs:
+  RepositoryName:
+    Description: ECR repository name
+    Value: !Ref ApplicationRepository
+
+  RepositoryUri:
+    Description: URI used to push and pull Docker images
+    Value: !GetAtt ApplicationRepository.RepositoryUri

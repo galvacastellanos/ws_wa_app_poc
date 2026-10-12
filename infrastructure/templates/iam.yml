@@ -1,0 +1,83 @@
+# IAM template
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ECS IAM roles for ws-wa-app-poc-v1
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    AllowedValues:
+      - dev
+      - prd
+
+  DatabaseSecretArn:
+    Type: String
+
+Resources:
+  EcsExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'ws-wa-app-poc-v1-${EnvironmentName}-ecs-execution-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+      Policies:
+        - PolicyName: ReadDatabaseSecret
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource: !Ref DatabaseSecretArn
+      Tags:
+        - Key: Application
+          Value: ws_wa_app_poc
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  EcsTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'ws-wa-app-poc-v1-${EnvironmentName}-ecs-task-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: ReadDatabaseSecret
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource: !Ref DatabaseSecretArn
+      Tags:
+        - Key: Application
+          Value: ws_wa_app_poc
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+Outputs:
+  ExecutionRoleArn:
+    Description: ARN for ECS task execution role
+    Value: !GetAtt EcsExecutionRole.Arn
+
+  TaskRoleArn:
+    Description: ARN for ECS task role
+    Value: !GetAtt EcsTaskRole.Arn

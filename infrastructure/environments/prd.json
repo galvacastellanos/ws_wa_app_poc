@@ -1,0 +1,34 @@
+[
+  {
+    "ParameterKey": "EnvironmentName",
+    "ParameterValue": "prd"
+  },
+  {
+    "ParameterKey": "TemplatesBaseUrl",
+    "ParameterValue": "https://REPLACE_BUCKET.s3.REPLACE_REGION.amazonaws.com/infrastructure"
+  },
+  {
+    "ParameterKey": "GitHubOwner",
+    "ParameterValue": "galvacastellanos"
+  },
+  {
+    "ParameterKey": "GitHubRepository",
+    "ParameterValue": "ws_wa_app_remesas"
+  },
+  {
+    "ParameterKey": "GitHubSubject",
+    "ParameterValue": "repo:galvacastellanos/ws_wa_app_remesas:ref:refs/heads/master"
+  },
+  {
+    "ParameterKey": "DesiredCount",
+    "ParameterValue": "0"
+  },
+  {
+    "ParameterKey": "ContainerPort",
+    "ParameterValue": "8080"
+  },
+  {
+    "ParameterKey": "HealthCheckPath",
+    "ParameterValue": "/health"
+  }
+]
