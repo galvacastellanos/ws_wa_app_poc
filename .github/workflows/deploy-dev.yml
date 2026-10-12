@@ -50,7 +50,7 @@ jobs:
         id: build-image
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
+          IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}
         run: |
           set -euo pipefail
 
@@ -79,31 +79,39 @@ jobs:
         run: |
           set -euo pipefail
 
+          TARGET_CONTAINER=$(jq -r --arg container "$ECS_CONTAINER_NAME" '
+            if (.containerDefinitions | length) == 0 then
+              error("Task definition has no containerDefinitions")
+            elif any(.containerDefinitions[]; .name == $container) then
+              $container
+            else
+              .containerDefinitions[0].name
+            end
+          ' task-definition-current.json)
+
+          echo "Configured container: $ECS_CONTAINER_NAME"
+          echo "Using container: $TARGET_CONTAINER"
+
           jq \
             --arg image "$IMAGE_URI" \
-            --arg container "$ECS_CONTAINER_NAME" \
+            --arg container "$TARGET_CONTAINER" \
             '
-              if any(.containerDefinitions[]; .name == $container)
-              then
-                .containerDefinitions |= map(
-                  if .name == $container
-                  then .image = $image
-                  else .
-                  end
+              .containerDefinitions |= map(
+                if .name == $container
+                then .image = $image
+                else .
+                end
+              )
+              | del(
+                  .taskDefinitionArn,
+                  .revision,
+                  .status,
+                  .requiresAttributes,
+                  .compatibilities,
+                  .registeredAt,
+                  .registeredBy,
+                  .deregisteredAt
                 )
-                | del(
-                    .taskDefinitionArn,
-                    .revision,
-                    .status,
-                    .requiresAttributes,
-                    .compatibilities,
-                    .registeredAt,
-                    .registeredBy,
-                    .deregisteredAt
-                  )
-              else
-                error("Container name not found in task definition")
-              end
             ' task-definition-current.json > task-definition-new.json
 
       - name: Register new task definition
