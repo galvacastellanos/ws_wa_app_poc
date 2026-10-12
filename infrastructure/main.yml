@@ -8,19 +8,6 @@ Parameters:
       - dev
       - prd
 
-  TemplatesBaseUrl:
-    Type: String
-    Description: HTTPS URL of the S3 folder containing child templates
-
-  GitHubOwner:
-    Type: String
-
-  GitHubRepository:
-    Type: String
-
-  GitHubSubject:
-    Type: String
-
   ImageUri:
     Type: String
     Default: public.ecr.aws/docker/library/nginx:latest
@@ -64,12 +51,18 @@ Resources:
   EcrStack:
     Type: AWS::CloudFormation::Stack
     Properties:
+      TemplateURL: !Sub
+        - '${BaseUrl}/templates/ecr.yml'
+        - BaseUrl: !FindInMap [EnvironmentConfig, !Ref EnvironmentName, TemplatesBaseUrl]
       Parameters:
         EnvironmentName: !Ref EnvironmentName
 
   SecretsStack:
     Type: AWS::CloudFormation::Stack
     Properties:
+      TemplateURL: !Sub
+        - '${BaseUrl}/templates/secrets.yml'
+        - BaseUrl: !FindInMap [EnvironmentConfig, !Ref EnvironmentName, TemplatesBaseUrl]
       Parameters:
         EnvironmentName: !Ref EnvironmentName
 
@@ -78,6 +71,9 @@ Resources:
     DependsOn:
       - SecretsStack
     Properties:
+      TemplateURL: !Sub
+        - '${BaseUrl}/templates/iam.yml'
+        - BaseUrl: !FindInMap [EnvironmentConfig, !Ref EnvironmentName, TemplatesBaseUrl]
       Parameters:
         EnvironmentName: !Ref EnvironmentName
         DatabaseSecretArn: !GetAtt SecretsStack.Outputs.DatabaseSecretArn
@@ -87,8 +83,14 @@ Resources:
     DependsOn:
       - IamStack
     Properties:
+      TemplateURL: !Sub
+        - '${BaseUrl}/templates/github-actions-role.yml'
+        - BaseUrl: !FindInMap [EnvironmentConfig, !Ref EnvironmentName, TemplatesBaseUrl]
       Parameters:
         EnvironmentName: !Ref EnvironmentName
+        GitHubOwner: !FindInMap [EnvironmentConfig, !Ref EnvironmentName, GitHubOwner]
+        GitHubRepository: !FindInMap [EnvironmentConfig, !Ref EnvironmentName, GitHubRepository]
+        GitHubSubject: !FindInMap [EnvironmentConfig, !Ref EnvironmentName, GitHubSubject]
 
   EcsStack:
     Type: AWS::CloudFormation::Stack
@@ -98,6 +100,9 @@ Resources:
       - IamStack
       - SecretsStack
     Properties:
+      TemplateURL: !Sub
+        - '${BaseUrl}/templates/ecs.yml'
+        - BaseUrl: !FindInMap [EnvironmentConfig, !Ref EnvironmentName, TemplatesBaseUrl]
       Parameters:
         EnvironmentName: !Ref EnvironmentName
         VpcId: !GetAtt NetworkingStack.Outputs.VpcId
